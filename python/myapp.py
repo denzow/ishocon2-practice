@@ -8,6 +8,8 @@ import MySQLdb.cursors
 
 from flask import Flask, abort, redirect, render_template, request, session
 
+from constants import VOTE_SUCCESS_HTML
+
 static_folder = pathlib.Path(__file__).resolve().parent / 'public'
 app = Flask(__name__, static_folder=str(static_folder), static_url_path='')
 
@@ -29,24 +31,39 @@ def config(key):
         raise "config value of %s undefined" % key
 
 
+def get_conn():
+    db = MySQLdb.connect(**{
+        'host': config('db_host'),
+        'port': config('db_port'),
+        'user': config('db_username'),
+        'passwd': config('db_password'),
+        'db': config('db_database'),
+        'charset': 'utf8mb4',
+        'cursorclass': MySQLdb.cursors.DictCursor,
+        'autocommit': True,
+    })
+    cur = db.cursor()
+    cur.execute("SET SESSION sql_mode='TRADITIONAL,NO_AUTO_VALUE_ON_ZERO,ONLY_FULL_GROUP_BY'")
+    cur.execute('SET NAMES utf8mb4')
+    return db
+
+
+DB_POOL = [get_conn() for _ in range(3)]
+
+
 def db():
     if hasattr(request, 'db'):
         return request.db
     else:
-        request.db = MySQLdb.connect(**{
-            'host': config('db_host'),
-            'port': config('db_port'),
-            'user': config('db_username'),
-            'passwd': config('db_password'),
-            'db': config('db_database'),
-            'charset': 'utf8mb4',
-            'cursorclass': MySQLdb.cursors.DictCursor,
-            'autocommit': True,
-        })
-        cur = request.db.cursor()
-        cur.execute("SET SESSION sql_mode='TRADITIONAL,NO_AUTO_VALUE_ON_ZERO,ONLY_FULL_GROUP_BY'")
-        cur.execute('SET NAMES utf8mb4')
+        request.db = DB_POOL.pop()
         return request.db
+
+
+@app.teardown_request
+def teardown(exception=None):
+    if hasattr(request, 'db'):
+        DB_POOL.append(request.db)
+        delattr(request, 'db')
 
 
 def get_election_results():
@@ -95,12 +112,6 @@ def get_candidate_by_id(candidate_id):
 def db_initialize():
     cur = db().cursor()
     cur.execute('DELETE FROM votes')
-
-
-@app.teardown_request
-def close_db(exception=None):
-    if hasattr(request, 'db'):
-        request.db.close()
 
 
 @app.route('/')
@@ -210,7 +221,7 @@ def post_vote():
     cur.execute('INSERT INTO votes (user_id, candidate_id, keyword, vote_count) VALUES (%s, %s, %s, %s)', (
         user['id'], candidate['id'], request.form['keyword'], int(request.form['vote_count'])
     ))
-    return render_template('vote.html', candidates=candidates, message='投票に成功しました')
+    return VOTE_SUCCESS_HTML
 
 
 @app.route('/initialize')
@@ -227,6 +238,6 @@ filters = [
     FilenameFilter('myapp.py'),  # プロファイル対象のファイル名指定
 ]
 # stremで出力ファイルを指定、filtersでフィルタを追加
-app_profile = LineProfilerMiddleware(app, stream=f, filters=filters)
+app_profile = LineProfilerMiddleware(app, stream=f, filters=filters, async_stream=True)
 if __name__ == "__main__":
     app.run()

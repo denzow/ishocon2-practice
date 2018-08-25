@@ -1,3 +1,4 @@
+VOTE_BASE_HTML = """
 <!DOCTYPE html>
 <html>
   <head>
@@ -92,7 +93,7 @@
                 <input class="form-control" name="vote_count" value="">
               </div>
 
-              <div class="text-danger">{{ message }}</div>
+              <div class="text-danger">{message}</div>
               <input class="btn btn-lg btn-success btn-block" type="submit" name="vote" value="投票" />
             </fieldset>
           </form>
@@ -103,3 +104,6 @@
 </div>
   </body>
 </html>
+"""
+
+VOTE_SUCCESS_HTML = VOTE_BASE_HTML.format(message='投票に成功しました')
