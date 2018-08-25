@@ -1,5 +1,6 @@
 import datetime
 
+from concurrent import futures
 import redis
 
 from collections import Counter
@@ -32,6 +33,9 @@ _config = {
 # unix_socket_path='/tmp/my_redis.sock'
 pool = redis.ConnectionPool(host='localhost', port=6379, db=0)
 r = redis.StrictRedis(connection_pool=pool)
+
+pool2 = redis.ConnectionPool(host='localhost', port=6379, db=1)
+r2 = redis.StrictRedis(connection_pool=pool2)
 #r = redis.Redis(unix_socket_path='/tmp/redis.sock')
 
 def config(key):
@@ -58,22 +62,22 @@ def get_conn():
     return db
 
 
-DB_POOL = [get_conn() for _ in range(3)]
+#DB_POOL = [get_conn() for _ in range(3)]
 
 
-def db():
-    if hasattr(request, 'db'):
-        return request.db
-    else:
-        request.db = DB_POOL.pop()
-        return request.db
-
-
-@app.teardown_request
-def teardown(exception=None):
-    if hasattr(request, 'db'):
-        DB_POOL.append(request.db)
-        delattr(request, 'db')
+# def db():
+#     if hasattr(request, 'db'):
+#         return request.db
+#     else:
+#         request.db = DB_POOL.pop()
+#         return request.db
+#
+#
+# @app.teardown_request
+# def teardown(exception=None):
+#     if hasattr(request, 'db'):
+#         DB_POOL.append(request.db)
+#         delattr(request, 'db')
 
 
 def get_election_results():
@@ -149,8 +153,7 @@ def get_candidate_by_id(candidate_id):
 
 
 def db_initialize():
-    cur = db().cursor()
-    cur.execute('DELETE FROM votes')
+    pass
 
 
 @app.route('/')
@@ -175,16 +178,11 @@ def get_index():
             sex_ratio['men'] += r['count'] or 0
         elif r['sex'] == '女':
             sex_ratio['women'] += r['count'] or 0
-    cached_html = get_index_page_cache()
-    if cached_html:
-        return cached_html
-
     html = render_template('index.html',
                            candidates=candidates,
                            parties=parties,
                            sex_ratio=sex_ratio)
 
-    set_index_page_cache(html)
     return html
 
 @app.route('/candidates/<int:candidate_id>')
@@ -227,24 +225,30 @@ def get_vote():
 
 @app.route('/vote', methods=['POST'])
 def post_vote():
-    cur = db().cursor()
+    #cur = db().cursor()
     raw_params = request._get_stream_for_parsing().read().decode('utf-8').split('&')
     #form_base = {x.split('=')[0]: unquote_plus(x.split('=')[1]) for x in raw_params}
     form_base = {x.split('=')[0]: x.split('=')[1] for x in raw_params}
     data = (form_base['mynumber'], form_base['name'], form_base['address'])
-    cur.execute('SELECT id, votes FROM users WHERE mynumber = %s AND name = %s AND address = %s', data)
-    user = cur.fetchone()
+    # cur.execute('SELECT id, votes FROM users WHERE mynumber = %s AND name = %s AND address = %s', data)
+    # user = cur.fetchone()
+    cache = get_user_cache(*data)
+    if cache:
+        user_id, user_votes = cache
+    else:
+        user_id, user_votes = (None, None)
+
     candidate_id = get_candidate_id_by_name(form_base['candidate'])
     voted_count = 0
-    if user:
-        voted_count = get_voted_count_cache(user['id'])
+    if user_id:
+        voted_count = get_voted_count_cache(user_id)
         # cur.execute('SELECT sum(vote_count) AS count FROM votes WHERE user_id = %s', (user['id'],))
         # voted_count = cur.fetchone()['count']
         # if not voted_count:
         #     voted_count = 0
-    if not user:
+    if not user_id:
         return constants.VOTE_FAIL1_HTML
-    elif user['votes'] < (int(form_base['vote_count']) + voted_count):
+    elif user_votes < (int(form_base['vote_count']) + voted_count):
         return constants.VOTE_FAIL2_HTML
     elif not form_base['candidate']:
         return constants.VOTE_FAIL3_HTML
@@ -258,9 +262,8 @@ def post_vote():
     #cur.execute('INSERT INTO votes (user_id, candidate_id, keyword, vote_count) VALUES (%s, %s, %s, %s)', data)
     set_vote_count_cache_by_candidate_id(candidate_id, vote_count)
     set_vote_keyword_count_cache_by_candidate_id(candidate_id, form_base['keyword'],  vote_count)
-    set_voted_count_cache(user['id'], vote_count)
+    set_voted_count_cache(user_id, vote_count)
 
-    clear_index_page_cache()
     return constants.VOTE_SUCCESS_HTML
 
 
@@ -329,47 +332,20 @@ def get_vote_keyword_count_cache_by_candidate_id(candidate_id):
 
     return result
 
-def set_index_page_cache(html):
-    set_cache('index', html)
-
-
-def get_index_page_cache():
-    return get_cache('index', None)
-
-def clear_index_page_cache():
-    set_cache('index', None)
-
-
-# def set_candidate_id_keyword_vote_count_cache(candidate_id, keyword, voted_count):
-#     key_name = md5('ckv_{}{}'.format(
-#         candidate_id,
-#         keyword,
-#     ).encode('utf-8')).hexdigest()
-#     set_cache(key_name, get_cache(key_name, 0) + voted_count)
-#
-#
-# def get_candidate_id_keyword_vote_count_cache(candidate_id, keyword):
-#     key_name = md5('ckv_{}{}'.format(
-#         candidate_id,
-#         keyword,
-#     ).encode('utf-8')).hexdigest()
-#     return get_cache(key_name)
-
-# def add_vote_buffer(data):
-#     uwsgi.queue_push(pickle.dumps(data))
-#
-#
-# def get_all_vote_buffer():
-#     result = []
-#     for queue in uwsgi.queue_pop():
-#         if not queue:
-#             break
-#         result.append(pickle.loads(queue))
-#     return result
-
 
 def get_vote_buffer_len():
     return uwsgi.queue_size()
+
+
+def get_user_cache(mynumber, name, address):
+    key_name = md5('{}{}{}'.format(
+        mynumber, name, address
+    ).encode('utf-8')).hexdigest()
+    cache = r2.get(key_name)
+    if cache:
+        user_id, votes = cache.decode('utf-8').split(':')
+        return int(user_id), int(votes)
+    return None
 
 
 @lru_cache(maxsize=100)
@@ -386,10 +362,6 @@ filters = [
 # stremで出力ファイルを指定、filtersでフィルタを追加
 app_profile = LineProfilerMiddleware(app, stream=f, filters=filters, async_stream=True)
 
-
-#uwsgi.queue_push("Hello, uWSGI stack!")
-# Pop it back
-#print(uwsgi.queue_last(10))
 
 if __name__ == "__main__":
     app.run()

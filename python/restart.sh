@@ -3,7 +3,7 @@ set -x
 export BASE_DIR=/home/ishocon/webapp/python
 echo 'mysql'
 sudo cp ${BASE_DIR}/etc/mysql/my.cnf  /etc/mysql/my.cnf
-sudo service mysql restart
+sudo service mysql stop
 
 echo 'nginx'
 sudo cp ${BASE_DIR}/etc/nginx/nginx.conf  /etc/nginx/nginx.conf
