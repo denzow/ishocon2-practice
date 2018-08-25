@@ -49,17 +49,28 @@ def update(params):
 
 conn = get_conn()
 cur = conn.cursor()
-cur.execute('select *  FROM users')
+# 4000000
+# 800000
+# 1600000
+# 2400000
+# 3200000
+# 4000000
+
+#cur.execute('select *  FROM users where id >= 0 and id < 800000')
+#cur.execute('select *  FROM users where id >= 800000 and id < 1600000')
+#cur.execute('select *  FROM users where id >= 1600000 and id < 2400000')
+#cur.execute('select *  FROM users where id >= 2400000 and id < 3200000')
+cur.execute('select *  FROM users where id >= 3200000 and id <= 4000000')
 
 
 BUFFER = []
 TASK_LIST = []
 count = 0
-with futures.ThreadPoolExecutor(max_workers=30) as executor:
+with futures.ThreadPoolExecutor(max_workers=10) as executor:
     for row in cur.fetchall():
         BUFFER.append((urllib.parse.quote_plus(row['name']), urllib.parse.quote_plus(row['address']), row['id']))
 
-        if len(BUFFER) > 100000:
+        if len(BUFFER) > 10000:
             count += 1
             print('execute', count)
             TASK_LIST.append(executor.submit(update, BUFFER.copy()))

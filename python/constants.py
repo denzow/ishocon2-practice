@@ -107,3 +107,47 @@ VOTE_BASE_HTML = """
 """
 
 VOTE_SUCCESS_HTML = VOTE_BASE_HTML.format(message='投票に成功しました')
+VOTE_FAIL1_HTML = VOTE_BASE_HTML.format(message='個人情報に誤りがあります')
+VOTE_FAIL2_HTML = VOTE_BASE_HTML.format(message='投票数が上限を超えています')
+VOTE_FAIL3_HTML = VOTE_BASE_HTML.format(message='候補者を記入してください')
+VOTE_FAIL4_HTML = VOTE_BASE_HTML.format(message='候補者を正しく記入してください')
+VOTE_FAIL5_HTML = VOTE_BASE_HTML.format(message='投票理由を記入してください')
+
+
+import urllib
+import urllib.parse
+
+CANDIDATES = {
+    '伊藤 一郎': 26,
+    '伊藤 三郎': 28,
+    '伊藤 五郎': 30,
+    '伊藤 四郎': 29,
+    '伊藤 次郎': 27,
+    '佐藤 一郎': 1,
+    '佐藤 三郎': 3,
+    '佐藤 五郎': 5,
+    '佐藤 四郎': 4,
+    '佐藤 次郎': 2,
+    '渡辺 一郎': 21,
+    '渡辺 三郎': 23,
+    '渡辺 五郎': 25,
+    '渡辺 四郎': 24,
+    '渡辺 次郎': 22,
+    '田中 一郎': 16,
+    '田中 三郎': 18,
+    '田中 五郎': 20,
+    '田中 四郎': 19,
+    '田中 次郎': 17,
+    '鈴木 一郎': 6,
+    '鈴木 三郎': 8,
+    '鈴木 五郎': 10,
+    '鈴木 四郎': 9,
+    '鈴木 次郎': 7,
+    '高橋 一郎': 11,
+    '高橋 三郎': 13,
+    '高橋 五郎': 15,
+    '高橋 四郎': 14,
+    '高橋 次郎': 12,
+}
+
+QUOTED_CANDIDATES = {urllib.parse.quote_plus(k): v for k, v in CANDIDATES.items()}

@@ -1,14 +1,15 @@
 import datetime
 import html
 import os
+import uwsgi
+import pickle
 import pathlib
-import urllib
+from urllib.parse import unquote_plus
 
 import MySQLdb.cursors
+import constants
 
 from flask import Flask, abort, redirect, render_template, request, session
-
-from constants import VOTE_SUCCESS_HTML
 
 static_folder = pathlib.Path(__file__).resolve().parent / 'public'
 app = Flask(__name__, static_folder=str(static_folder), static_url_path='')
@@ -192,36 +193,37 @@ def get_vote():
 @app.route('/vote', methods=['POST'])
 def post_vote():
     cur = db().cursor()
-    cur.execute('SELECT * FROM users WHERE name = "{}" AND address = "{}" AND mynumber = "{}"'.format(
-        request.form['name'], request.form['address'], request.form['mynumber']
+    raw_params = request._get_stream_for_parsing().read().decode('utf-8').split('&')
+    #form_base = {x.split('=')[0]: unquote_plus(x.split('=')[1]) for x in raw_params}
+    form_base = {x.split('=')[0]: x.split('=')[1] for x in raw_params}
+    cur.execute('SELECT id, votes FROM users WHERE mynumber = %s AND name = %s AND address = %s', (
+        form_base['mynumber'], form_base['name'], form_base['address']
     ))
     user = cur.fetchone()
-    cur.execute('SELECT * FROM candidates WHERE name = "{}"'.format(request.form['candidate']))
-    candidate = cur.fetchone()
+    candidate_id = get_candidate_id_by_name(form_base['candidate'])
     voted_count = 0
     if user:
+        #voted_count = get_voted_count_cache(user['id'])
         cur.execute('SELECT sum(vote_count) AS count FROM votes WHERE user_id = %s', (user['id'],))
         voted_count = cur.fetchone()['count']
         if not voted_count:
             voted_count = 0
-
-    cur.execute('SELECT * FROM candidates')
-    candidates = cur.fetchall()
     if not user:
-        return render_template('vote.html', candidates=candidates, message='個人情報に誤りがあります')
-    elif user['votes'] < (int(request.form['vote_count']) + voted_count):
-        return render_template('vote.html', candidates=candidates, message='投票数が上限を超えています')
-    elif not request.form['candidate']:
-        return render_template('vote.html', candidates=candidates, message='候補者を記入してください')
-    elif not candidate:
-        return render_template('vote.html', candidates=candidates, message='候補者を正しく記入してください')
-    elif not request.form['keyword']:
-        return render_template('vote.html', candidates=candidates, message='投票理由を記入してください')
+        return constants.VOTE_FAIL1_HTML
+    elif user['votes'] < (int(form_base['vote_count']) + voted_count):
+        return constants.VOTE_FAIL2_HTML
+    elif not form_base['candidate']:
+        return constants.VOTE_FAIL3_HTML
+    elif not candidate_id:
+        return constants.VOTE_FAIL4_HTML
+    elif not form_base['keyword']:
+        return constants.VOTE_FAIL5_HTML
 
     cur.execute('INSERT INTO votes (user_id, candidate_id, keyword, vote_count) VALUES (%s, %s, %s, %s)', (
-        user['id'], candidate['id'], request.form['keyword'], int(request.form['vote_count'])
+        user['id'], candidate_id, unquote_plus(form_base['keyword']), int(form_base['vote_count'])
     ))
-    return VOTE_SUCCESS_HTML
+    set_voted_count_cache(user['id'], int(form_base['vote_count']))
+    return constants.VOTE_SUCCESS_HTML
 
 
 @app.route('/initialize')
@@ -229,6 +231,33 @@ def get_initialize():
     db_initialize()
     return ''
 
+
+def get_candidate_id_by_name(name):
+    return constants.QUOTED_CANDIDATES.get(name, None)
+
+
+def set_cache(key, val):
+    if not uwsgi.cache_exists(key):
+        uwsgi.cache_set(key, pickle.dumps(val))
+    else:
+        uwsgi.cache_update(key, pickle.dumps(val))
+
+
+def get_cache(key, default=None):
+    try:
+        return pickle.loads(uwsgi.cache_get(key))
+    except:
+        return default
+
+
+def get_voted_count_cache(user_id):
+    key_name = 'voted_{}'.format(user_id)
+    return get_cache(key_name, 0)
+
+
+def set_voted_count_cache(user_id, voted_count):
+    key_name = 'voted_{}'.format(user_id)
+    set_cache(key_name, get_cache(key_name, 0) + voted_count)
 
 
 from wsgi_lineprof.filters import FilenameFilter
