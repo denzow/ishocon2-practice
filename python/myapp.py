@@ -175,21 +175,24 @@ def get_index():
             sex_ratio['men'] += r['count'] or 0
         elif r['sex'] == '女':
             sex_ratio['women'] += r['count'] or 0
+    cached_html = get_index_page_cache()
+    if cached_html:
+        return cached_html
 
-    return render_template('index.html',
+    html = render_template('index.html',
                            candidates=candidates,
                            parties=parties,
                            sex_ratio=sex_ratio)
 
+    set_index_page_cache(html)
+    return html
 
 @app.route('/candidates/<int:candidate_id>')
 def get_candidate(candidate_id):
-    cur = db().cursor()
     candidate = get_candidate_by_id(candidate_id)
     if not candidate:
         return redirect('/')
-
-    #cur.execute('SELECT sum(vote_count) AS count FROM votes WHERE candidate_id = {}'.format(candidate_id))
+    # cur.execute('SELECT sum(vote_count) AS count FROM votes WHERE candidate_id = {}'.format(candidate_id))
     votes = get_vote_count_cache_by_candidate_id(candidate_id)
     keywords = get_voice_of_supporter_by_id(candidate_id)
     return render_template('candidate.html',
@@ -252,11 +255,13 @@ def post_vote():
         return constants.VOTE_FAIL5_HTML
 
     vote_count = int(form_base['vote_count'])
-    data = (user['id'], candidate_id, form_base['keyword'], vote_count)
+    #data = (user['id'], candidate_id, form_base['keyword'], vote_count)
     #cur.execute('INSERT INTO votes (user_id, candidate_id, keyword, vote_count) VALUES (%s, %s, %s, %s)', data)
     set_vote_count_cache_by_candidate_id(candidate_id, vote_count)
     set_vote_keyword_count_cache_by_candidate_id(candidate_id, form_base['keyword'],  vote_count)
     set_voted_count_cache(user['id'], vote_count)
+
+    clear_index_page_cache()
     return constants.VOTE_SUCCESS_HTML
 
 
@@ -324,6 +329,17 @@ def get_vote_keyword_count_cache_by_candidate_id(candidate_id):
         result[keyword] = int(r.get(key))
 
     return result
+
+def set_index_page_cache(html):
+    set_cache('index', html)
+
+
+def get_index_page_cache():
+    return get_cache('index', None)
+
+def clear_index_page_cache():
+    set_cache('index', None)
+
 
 # def set_candidate_id_keyword_vote_count_cache(candidate_id, keyword, voted_count):
 #     key_name = md5('ckv_{}{}'.format(

@@ -1,57 +1,56 @@
 VOTE_BASE_HTML = """
 <!DOCTYPE html>
 <html>
-  <head>
-    <meta http-equiv="Content-Type" content="text/html" charset="utf-8">
-    <link rel="stylesheet" href="/css/bootstrap.min.css">
-    <title>ISUCON選挙結果</title>
-  </head>
-
-  <body>
-    <nav class="navbar navbar-inverse navbar-fixed-top">
-      <div class="container">
-        <div class="navbar-header">
-          <a class="navbar-brand" href="/">ISUCON選挙結果</a>
-        </div>
-        <div class="header clearfix">
-          <nav>
-            <ul class="nav nav-pills pull-right">
-              <li role="presentation"><a href="/vote">投票する</a></li>
-            </ul>
-          </nav>
-        </div>
-      </div>
-    </nav>
+<head>
+<meta http-equiv="Content-Type" content="text/html" charset="utf-8">
+<link rel="stylesheet" href="/css/bootstrap.min.css">
+<title>ISUCON選挙結果</title>
+</head>
+<body>
+<nav class="navbar navbar-inverse navbar-fixed-top">
+<div class="container">
+<div class="navbar-header">
+<a class="navbar-brand" href="/">ISUCON選挙結果</a>
+</div>
+<div class="header clearfix">
+<nav>
+<ul class="nav nav-pills pull-right">
+<li role="presentation"><a href="/vote">投票する</a></li>
+</ul>
+</nav>
+</div>
+</div>
+</nav>
 <div class="jumbotron">
-  <div class="container">
-    <h1>清き一票をお願いします！！！</h1>
-  </div>
+<div class="container">
+<h1>清き一票をお願いします！！！</h1>
+</div>
 </div>
 <div class="container">
-  <div class="row">
-    <div class="col-md-6 col-md-offset-3">
-      <div class="login-panel panel panel-default">
-        <div class="panel-heading">
-          <h3 class="panel-title">投票フォーム</h3>
-        </div>
-        <div class="panel-body">
-          <form method="POST" action="/vote">
-            <fieldset>
-              <label>氏名</label>
-              <div class="form-group">
-                <input class="form-control" name="name" autofocus>
-              </div>
-              <label>住所</label>
-              <div class="form-group">
-                <input class="form-control" name="address" value="">
-              </div>
-              <label>私の番号</label>
-              <div class="form-group">
-                <input class="form-control" name="mynumber" value="">
-              </div>
-              <label>候補者</label>
-              <div class="form-group">
-                <select name="candidate">
+<div class="row">
+<div class="col-md-6 col-md-offset-3">
+<div class="login-panel panel panel-default">
+<div class="panel-heading">
+<h3 class="panel-title">投票フォーム</h3>
+</div>
+<div class="panel-body">
+<form method="POST" action="/vote">
+<fieldset>
+<label>氏名</label>
+<div class="form-group">
+<input class="form-control" name="name" autofocus>
+</div>
+<label>住所</label>
+<div class="form-group">
+<input class="form-control" name="address" value="">
+</div>
+<label>私の番号</label>
+<div class="form-group">
+<input class="form-control" name="mynumber" value="">
+</div>
+<label>候補者</label>
+<div class="form-group">
+<select name="candidate">
 <option value="伊藤 一郎">伊藤 一郎</option>
 <option value="伊藤 三郎">伊藤 三郎</option>
 <option value="伊藤 五郎">伊藤 五郎</option>
@@ -82,29 +81,28 @@ VOTE_BASE_HTML = """
 <option value="高橋 五郎">高橋 五郎</option>
 <option value="高橋 四郎">高橋 四郎</option>
 <option value="高橋 次郎">高橋 次郎</option>
-                </select>
-              </div>
-              <label>投票理由</label>
-              <div class="form-group">
-                <input class="form-control" name="keyword" value="">
-              </div>
-              <label>投票数</label>
-              <div class="form-group">
-                <input class="form-control" name="vote_count" value="">
-              </div>
-
-              <div class="text-danger">{message}</div>
-              <input class="btn btn-lg btn-success btn-block" type="submit" name="vote" value="投票" />
-            </fieldset>
-          </form>
-        </div>
-      </div>
-    </div>
-  </div>
+</select>
 </div>
-  </body>
+<label>投票理由</label>
+<div class="form-group">
+<input class="form-control" name="keyword" value="">
+</div>
+<label>投票数</label>
+<div class="form-group">
+<input class="form-control" name="vote_count" value="">
+</div>
+<div class="text-danger">{message}</div>
+<input class="btn btn-lg btn-success btn-block" type="submit" name="vote" value="投票" />
+</fieldset>
+</form>
+</div>
+</div>
+</div>
+</div>
+</div>
+</body>
 </html>
-"""
+""".replace('\n', '')
 
 VOTE_HTML = VOTE_BASE_HTML.format(message='')
 VOTE_SUCCESS_HTML = VOTE_BASE_HTML.format(message='投票に成功しました')
