@@ -135,7 +135,7 @@ def get_voice_of_supporter(candidate_ids):
 
     total_keywords = Counter()
     for candidate_id in candidate_ids:
-        total_keywords += Counter(get_vote_keyword_count_cache_by_candidate_id(candidate_id))
+        total_keywords.update(get_vote_keyword_count_cache_by_candidate_id(candidate_id))
 
     return [unquote_cached(r[0]) for r in total_keywords.most_common(10)]
 
@@ -231,9 +231,8 @@ def post_vote():
     raw_params = request._get_stream_for_parsing().read().decode('utf-8').split('&')
     #form_base = {x.split('=')[0]: unquote_plus(x.split('=')[1]) for x in raw_params}
     form_base = {x.split('=')[0]: x.split('=')[1] for x in raw_params}
-    cur.execute('SELECT id, votes FROM users WHERE mynumber = %s AND name = %s AND address = %s', (
-        form_base['mynumber'], form_base['name'], form_base['address']
-    ))
+    data = (form_base['mynumber'], form_base['name'], form_base['address'])
+    cur.execute('SELECT id, votes FROM users WHERE mynumber = %s AND name = %s AND address = %s', data)
     user = cur.fetchone()
     candidate_id = get_candidate_id_by_name(form_base['candidate'])
     voted_count = 0
