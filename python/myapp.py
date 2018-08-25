@@ -99,16 +99,11 @@ LIMIT 10
 
 
 def get_all_party_name():
-    cur = db().cursor()
-    cur.execute('SELECT political_party FROM candidates GROUP BY political_party')
-    records = cur.fetchall()
-    return [r['political_party'] for r in records]
+    return list(constants.PARTY_MASTER.keys())
 
 
 def get_candidate_by_id(candidate_id):
-    cur = db().cursor()
-    cur.execute('SELECT * FROM candidates WHERE id = {}'.format(candidate_id))
-    return cur.fetchone()
+    return constants.CANDIDATES_MASTER.get(candidate_id, None)
 
 
 def db_initialize():
@@ -148,8 +143,7 @@ def get_index():
 @app.route('/candidates/<int:candidate_id>')
 def get_candidate(candidate_id):
     cur = db().cursor()
-    cur.execute('SELECT * FROM candidates WHERE id = {}'.format(candidate_id))
-    candidate = cur.fetchone()
+    candidate = get_candidate_by_id(candidate_id)
     if not candidate:
         return redirect('/')
 
@@ -220,9 +214,9 @@ def post_vote():
     elif not form_base['keyword']:
         return constants.VOTE_FAIL5_HTML
 
-    cur.execute('INSERT INTO votes (user_id, candidate_id, keyword, vote_count) VALUES (%s, %s, %s, %s)', (
-        user['id'], candidate_id, form_base['keyword'], int(form_base['vote_count'])
-    ))
+    data = (user['id'], candidate_id, form_base['keyword'], int(form_base['vote_count']))
+    cur.execute('INSERT INTO votes (user_id, candidate_id, keyword, vote_count) VALUES (%s, %s, %s, %s)', data)
+
     set_voted_count_cache(user['id'], int(form_base['vote_count']))
     return constants.VOTE_SUCCESS_HTML
 
@@ -260,6 +254,25 @@ def set_voted_count_cache(user_id, voted_count):
     key_name = 'voted_{}'.format(user_id)
     set_cache(key_name, get_cache(key_name, 0) + voted_count)
 
+
+
+def add_vote_buffer(data):
+    uwsgi.queue_push(pickle.dumps(data))
+
+
+def get_all_vote_buffer():
+    result = []
+    for queue in uwsgi.queue_pop():
+        if not queue:
+            break
+        result.append(pickle.loads(queue))
+    return result
+
+
+def get_vote_buffer_len():
+    return uwsgi.queue_size()
+
+
 @lru_cache(maxsize=100)
 def unquote_cached(keyword):
     return unquote_plus(keyword)
@@ -273,5 +286,11 @@ filters = [
 ]
 # stremで出力ファイルを指定、filtersでフィルタを追加
 app_profile = LineProfilerMiddleware(app, stream=f, filters=filters, async_stream=True)
+
+
+#uwsgi.queue_push("Hello, uWSGI stack!")
+# Pop it back
+#print(uwsgi.queue_last(10))
+
 if __name__ == "__main__":
     app.run()

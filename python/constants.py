@@ -151,3 +151,46 @@ CANDIDATES = {
 }
 
 QUOTED_CANDIDATES = {urllib.parse.quote_plus(k): v for k, v in CANDIDATES.items()}
+
+
+
+CANDIDATES_MASTER = {
+    1: {'id': 1, 'name': '佐藤 一郎', 'political_party': '夢実現党', 'sex': '男'},
+    2: {'id': 2, 'name': '佐藤 次郎', 'political_party': '国民10人大活躍党', 'sex': '女'},
+    3: {'id': 3, 'name': '佐藤 三郎', 'political_party': '国民10人大活躍党', 'sex': '女'},
+    4: {'id': 4, 'name': '佐藤 四郎', 'political_party': '国民10人大活躍党', 'sex': '男'},
+    5: {'id': 5, 'name': '佐藤 五郎', 'political_party': '国民元気党', 'sex': '女'},
+    6: {'id': 6, 'name': '鈴木 一郎', 'political_party': '国民平和党', 'sex': '男'},
+    7: {'id': 7, 'name': '鈴木 次郎', 'political_party': '国民元気党', 'sex': '女'},
+    8: {'id': 8, 'name': '鈴木 三郎', 'political_party': '国民10人大活躍党', 'sex': '女'},
+    9: {'id': 9, 'name': '鈴木 四郎', 'political_party': '国民元気党', 'sex': '女'},
+    10: {'id': 10, 'name': '鈴木 五郎', 'political_party': '国民元気党', 'sex': '女'},
+    11: {'id': 11, 'name': '高橋 一郎', 'political_party': '国民平和党', 'sex': '男'},
+    12: {'id': 12, 'name': '高橋 次郎', 'political_party': '夢実現党', 'sex': '男'},
+    13: {'id': 13, 'name': '高橋 三郎', 'political_party': '夢実現党', 'sex': '男'},
+    14: {'id': 14, 'name': '高橋 四郎', 'political_party': '国民平和党', 'sex': '女'},
+    15: {'id': 15, 'name': '高橋 五郎', 'political_party': '国民10人大活躍党', 'sex': '女'},
+    16: {'id': 16, 'name': '田中 一郎', 'political_party': '夢実現党', 'sex': '男'},
+    17: {'id': 17, 'name': '田中 次郎', 'political_party': '国民平和党', 'sex': '女'},
+    18: {'id': 18, 'name': '田中 三郎', 'political_party': '夢実現党', 'sex': '女'},
+    19: {'id': 19, 'name': '田中 四郎', 'political_party': '国民元気党', 'sex': '男'},
+    20: {'id': 20, 'name': '田中 五郎', 'political_party': '夢実現党', 'sex': '女'},
+    21: {'id': 21, 'name': '渡辺 一郎', 'political_party': '夢実現党', 'sex': '女'},
+    22: {'id': 22, 'name': '渡辺 次郎', 'political_party': '国民平和党', 'sex': '女'},
+    23: {'id': 23, 'name': '渡辺 三郎', 'political_party': '夢実現党', 'sex': '男'},
+    24: {'id': 24, 'name': '渡辺 四郎', 'political_party': '国民平和党', 'sex': '女'},
+    25: {'id': 25, 'name': '渡辺 五郎', 'political_party': '国民10人大活躍党', 'sex': '男'},
+    26: {'id': 26, 'name': '伊藤 一郎', 'political_party': '夢実現党', 'sex': '女'},
+    27: {'id': 27, 'name': '伊藤 次郎', 'political_party': '国民10人大活躍党', 'sex': '女'},
+    28: {'id': 28, 'name': '伊藤 三郎', 'political_party': '国民平和党', 'sex': '女'},
+    29: {'id': 29, 'name': '伊藤 四郎', 'political_party': '国民10人大活躍党', 'sex': '男'},
+    30: {'id': 30, 'name': '伊藤 五郎', 'political_party': '国民元気党', 'sex': '男'}
+}
+
+
+PARTY_MASTER = {
+    '国民10人大活躍党': ['2','3','4','8','15','25','27','29'],
+    '国民元気党': ['5','7','9','10','19','30'],
+    '国民平和党': ['6','11','14','17','22','24','28'],
+    '夢実現党': ['1','12','13','16','18','20','21','23','26'],
+}
