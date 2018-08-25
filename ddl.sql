@@ -1,0 +1,1 @@
+alter table votes add column vote_count integer;

@@ -55,7 +55,7 @@ def get_election_results():
 SELECT c.id, c.name, c.political_party, c.sex, v.count
 FROM candidates AS c
 LEFT OUTER JOIN
-  (SELECT candidate_id, COUNT(*) AS count
+  (SELECT candidate_id, sum(vote_count) AS count
   FROM votes
   GROUP BY candidate_id) AS v
 ON c.id = v.candidate_id
@@ -72,7 +72,7 @@ SELECT keyword
 FROM votes
 WHERE candidate_id IN ({})
 GROUP BY keyword
-ORDER BY COUNT(*) DESC
+ORDER BY sum(vote_count) DESC
 LIMIT 10
 """.format(candidate_ids_str))
     records = cur.fetchall()
@@ -140,7 +140,7 @@ def get_candidate(candidate_id):
     if not candidate:
         return redirect('/')
 
-    cur.execute('SELECT COUNT(*) AS count FROM votes WHERE candidate_id = {}'.format(candidate_id))
+    cur.execute('SELECT sum(vote_count) AS count FROM votes WHERE candidate_id = {}'.format(candidate_id))
     votes = cur.fetchone()['count']
     keywords = get_voice_of_supporter([candidate_id])
     return render_template('candidate.html',
@@ -189,8 +189,10 @@ def post_vote():
     candidate = cur.fetchone()
     voted_count = 0
     if user:
-        cur.execute('SELECT COUNT(*) AS count FROM votes WHERE user_id = {}'.format(user['id']))
+        cur.execute('SELECT sum(vote_count) AS count FROM votes WHERE user_id = %s', (user['id'],))
         voted_count = cur.fetchone()['count']
+        if not voted_count:
+            voted_count = 0
 
     cur.execute('SELECT * FROM candidates')
     candidates = cur.fetchall()
@@ -205,16 +207,16 @@ def post_vote():
     elif not request.form['keyword']:
         return render_template('vote.html', candidates=candidates, message='投票理由を記入してください')
 
-    for _ in range(int(request.form['vote_count'])):
-        cur.execute('INSERT INTO votes (user_id, candidate_id, keyword) VALUES ({}, {}, "{}")'.format(
-            user['id'], candidate['id'], request.form['keyword']
-        ))
+    cur.execute('INSERT INTO votes (user_id, candidate_id, keyword, vote_count) VALUES (%s, %s, %s, %s)', (
+        user['id'], candidate['id'], request.form['keyword'], int(request.form['vote_count'])
+    ))
     return render_template('vote.html', candidates=candidates, message='投票に成功しました')
 
 
 @app.route('/initialize')
 def get_initialize():
     db_initialize()
+    return ''
 
 
 

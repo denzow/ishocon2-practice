@@ -1,0 +1,16 @@
+ file_name               func_name  total_time  avg_time  min_time  max_time  call_count
+----------  ----------------------  ----------  --------  --------  --------  ----------
+./myapp.py  post_vote                 33.30987   0.01146   0.00708   0.09799        2907
+./myapp.py  db                         8.71442   0.00245   0.00228   0.01137        3558
+./myapp.py  get_index                  2.85267    0.0088   0.00741   0.07394         324
+./myapp.py  get_election_results       1.82029    0.0042   0.00092   0.00588         433
+./myapp.py  get_candidate              1.64349   0.00754   0.00448   0.02995         218
+./myapp.py  get_political_party        1.53831   0.01411   0.01081   0.03268         109
+./myapp.py  get_voice_of_supporter      1.5135   0.00463   0.00079   0.01219         327
+./myapp.py  close_db                   0.28753     7e-05     3e-05   0.00021        4197
+./myapp.py  get_all_party_name         0.27062   0.00084   0.00044   0.00173         323
+./myapp.py  config                     0.02087     1e-05         0     3e-05        3558
+./myapp.py  get_initialize             0.01174   0.01174   0.01174   0.01174           1
+./myapp.py  db_initialize              0.01173   0.01173   0.01173   0.01173           1
+./myapp.py  <listcomp>                 0.00638     1e-05         0     6e-05        1086
+./myapp.py  <lambda>                   0.00083         0         0     4e-05         323

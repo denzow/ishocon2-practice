@@ -1,0 +1,177 @@
+ file_name  line  avg_per_time   hits  total_time       graph                                                                                                         code
+----------  ----  ------------  -----  ----------  ----------  -----------------------------------------------------------------------------------------------------------
+./myapp.py    25             0      0           0              def config(key):
+./myapp.py    26         0.606  17790       10789                  if key in _config:
+./myapp.py    27         0.567  17790       10082                      return _config[key]
+./myapp.py    28             0      0           0                  else:
+./myapp.py    29             0      0           0                      raise "config value of %s undefined" % key
+./myapp.py    32             0      0           0              def db():
+./myapp.py    33        28.332   4317      122311                  if hasattr(request, 'db'):
+./myapp.py    34        28.519    759       21646                      return request.db
+./myapp.py    35             0      0           0                  else:
+./myapp.py    36         1.131   3558        4024                      request.db = MySQLdb.connect(**{
+./myapp.py    37          4.94   3558       17578                          'host': config('db_host'),
+./myapp.py    38         3.725   3558       13252                          'port': config('db_port'),
+./myapp.py    39         3.496   3558       12438                          'user': config('db_username'),
+./myapp.py    40         3.571   3558       12704                          'passwd': config('db_password'),
+./myapp.py    41         3.598   3558       12802                          'db': config('db_database'),
+./myapp.py    42         0.646   3558        2300                          'charset': 'utf8mb4',
+./myapp.py    43         0.972   3558        3460                          'cursorclass': MySQLdb.cursors.DictCursor,
+./myapp.py    44      1828.918   3558     6507290  *****                   'autocommit': True,
+./myapp.py    45             0      0           0                      })
+./myapp.py    46        51.459   3558      183090                      cur = request.db.cursor()
+./myapp.py    47       242.861   3558      864101  *                   cur.execute("SET SESSION sql_mode='TRADITIONAL,NO_AUTO_VALUE_ON_ZERO,ONLY_FULL_GROUP_BY'")
+./myapp.py    48       235.141   3558      836633  *                   cur.execute('SET NAMES utf8mb4')
+./myapp.py    49        28.329   3558      100793                      return request.db
+./myapp.py    52             0      0           0              def get_election_results():
+./myapp.py    53       2045.76    433      885814  *               cur = db().cursor()
+./myapp.py    54         0.658    433         285                  cur.execute("""
+./myapp.py    55             0      0           0              SELECT c.id, c.name, c.political_party, c.sex, v.count
+./myapp.py    56             0      0           0              FROM candidates AS c
+./myapp.py    57             0      0           0              LEFT OUTER JOIN
+./myapp.py    58             0      0           0                (SELECT candidate_id, sum(vote_count) AS count
+./myapp.py    59             0      0           0                FROM votes
+./myapp.py    60             0      0           0                GROUP BY candidate_id) AS v
+./myapp.py    61             0      0           0              ON c.id = v.candidate_id
+./myapp.py    62             0      0           0              ORDER BY v.count DESC
+./myapp.py    63      2139.201    432      924135  *           """)
+./myapp.py    64        18.884    432        8158                  return cur.fetchall()
+./myapp.py    67             0      0           0              def get_voice_of_supporter(candidate_ids):
+./myapp.py    68        93.043    327       30425                  cur = db().cursor()
+./myapp.py    69         3.595   1685        6057                  candidate_ids_str = ','.join([str(cid) for cid in candidate_ids])
+./myapp.py    70         0.881    327         288                  cur.execute("""
+./myapp.py    71             0      0           0              SELECT keyword
+./myapp.py    72             0      0           0              FROM votes
+./myapp.py    73             0      0           0              WHERE candidate_id IN ({})
+./myapp.py    74             0      0           0              GROUP BY keyword
+./myapp.py    75             0      0           0              ORDER BY sum(vote_count) DESC
+./myapp.py    76             0      0           0              LIMIT 10
+./myapp.py    77      4490.287    327     1468324  *           """.format(candidate_ids_str))
+./myapp.py    78         13.56    327        4434                  records = cur.fetchall()
+./myapp.py    79         2.179   3756        8184                  return [r['keyword'] for r in records]
+./myapp.py    80             0      0           0
+./myapp.py    81             0      0           0
+./myapp.py    82             0      0           0              def get_all_party_name():
+./myapp.py    83       119.028    323       38446                  cur = db().cursor()
+./myapp.py    84       694.579    323      224349                  cur.execute('SELECT political_party FROM candidates GROUP BY political_party')
+./myapp.py    85        13.341    323        4309                  records = cur.fetchall()
+./myapp.py    86          2.48   1938        4807                  return [r['political_party'] for r in records]
+./myapp.py    87             0      0           0
+./myapp.py    88             0      0           0
+./myapp.py    89             0      0           0              get_candidate_by_id(candidate_id):
+./myapp.py    90             0      0           0              cur = db().cursor()
+./myapp.py    91             0      0           0              cur.execute('SELECT * FROM candidates WHERE id = {}'.format(candidate_id))
+./myapp.py    92             0      0           0              return cur.fetchone()
+./myapp.py    95             0      0           0              def db_initialize():
+./myapp.py    96       11420.0      1       11420                  cur = db().cursor()
+./myapp.py    97         308.0      1         308                  cur.execute('DELETE FROM votes')
+./myapp.py   100             0      0           0              @app.teardown_request
+./myapp.py   101             0      0           0              def close_db(exception=None):
+./myapp.py   102         27.01   4197      113360                  if hasattr(request, 'db'):
+./myapp.py   103        48.953   3558      174175                      request.db.close()
+./myapp.py   106             0      0           0              @app.route('/')
+./myapp.py   107             0      0           0              def get_index():
+./myapp.py   108         0.799    324         259                  candidates = []
+./myapp.py   109      4857.352    324     1573782  *               election_results = get_election_results()
+./myapp.py   110             0      0           0                  # 上位10人と最下位のみ表示
+./myapp.py   111         2.877    324         932                  candidates += election_results[:10]
+./myapp.py   112         1.654    324         536                  candidates.append(election_results[-1])
+./myapp.py   113             0      0           0
+./myapp.py   114       848.957    324      275062                  parties_name = get_all_party_name()
+./myapp.py   115         0.997    324         323                  parties = {}
+./myapp.py   116         0.833   1620        1349                  for name in parties_name:
+./myapp.py   117         0.885   1296        1147                      parties[name] = 0
+./myapp.py   118         0.744  10044        7471                  for r in election_results:
+./myapp.py   119         1.243   9720       12083                      parties[r['political_party']] += r['count'] or 0
+./myapp.py   120         3.846   1616        6215                  parties = sorted(parties.items(), key=lambda x: x[1], reverse=True)
+./myapp.py   121             0      0           0
+./myapp.py   122         1.127    324         365                  sex_ratio = {'men': 0, 'women': 0}
+./myapp.py   123         0.708  10044        7108                  for r in election_results:
+./myapp.py   124         0.802   9720        7795                      if r['sex'] == '男':
+./myapp.py   125         0.947   3888        3683                          sex_ratio['men'] += r['count'] or 0
+./myapp.py   126         0.769   5832        4485                      elif r['sex'] == '女':
+./myapp.py   127         0.958   5832        5589                          sex_ratio['women'] += r['count'] or 0
+./myapp.py   128             0      0           0
+./myapp.py   129         0.843    324         273                  return render_template('index.html',
+./myapp.py   130         0.694    324         225                                         candidates=candidates,
+./myapp.py   131         0.765    324         248                                         parties=parties,
+./myapp.py   132      2915.352    324      944574  *                                      sex_ratio=sex_ratio)
+./myapp.py   135             0      0           0              @app.route('/candidates/<int:candidate_id>')
+./myapp.py   136             0      0           0              def get_candidate(candidate_id):
+./myapp.py   137      2454.156    218      535006                  cur = db().cursor()
+./myapp.py   138       309.789    218       67534                  cur.execute('SELECT * FROM candidates WHERE id = {}'.format(candidate_id))
+./myapp.py   139        13.619    218        2969                  candidate = cur.fetchone()
+./myapp.py   140         0.679    218         148                  if not candidate:
+./myapp.py   141             0      0           0                      return redirect('/')
+./myapp.py   142             0      0           0
+./myapp.py   143       704.739    218      153633                  cur.execute('SELECT sum(vote_count) AS count FROM votes WHERE candidate_id = {}'.format(candidate_id))
+./myapp.py   144        12.587    218        2744                  votes = cur.fetchone()['count']
+./myapp.py   145        3201.5    218      697927  *               keywords = get_voice_of_supporter([candidate_id])
+./myapp.py   146          0.78    218         170                  return render_template('candidate.html',
+./myapp.py   147         0.679    218         148                                         candidate=candidate,
+./myapp.py   148         0.596    218         130                                         votes=votes,
+./myapp.py   149       839.803    218      183077                                         keywords=keywords)
+./myapp.py   152             0      0           0              @app.route('/political_parties/<string:name>')
+./myapp.py   153             0      0           0              def get_political_party(name):
+./myapp.py   154      2467.642    109      268973                  cur = db().cursor()
+./myapp.py   155         0.642    109          70                  votes = 0
+./myapp.py   156         75.37   3379      254676                  for r in get_election_results():
+./myapp.py   157         1.148   3270        3754                      if r['political_party'] == name:
+./myapp.py   158         1.616    813        1314                          votes += r['count'] or 0
+./myapp.py   159             0      0           0
+./myapp.py   160       584.771    109       63740                  cur.execute('SELECT * FROM candidates WHERE political_party = "{}"'.format(name))
+./myapp.py   161        16.908    109        1843                  candidates = cur.fetchall()
+./myapp.py   162         2.889   1031        2979                  candidate_ids = [c['id'] for c in candidates]
+./myapp.py   163      7534.037    109      821210  *               keywords = get_voice_of_supporter(candidate_ids)
+./myapp.py   164         0.853    109          93                  return render_template('political_party.html',
+./myapp.py   165         0.789    109          86                                         political_party=name,
+./myapp.py   166         0.761    109          83                                         votes=votes,
+./myapp.py   167         0.725    109          79                                         candidates=candidates,
+./myapp.py   168      1103.541    109      120286                                         keywords=keywords)
+./myapp.py   169             0      0           0
+./myapp.py   170             0      0           0
+./myapp.py   171             0      0           0              .route('/vote')
+./myapp.py   172             0      0           0              get_vote():
+./myapp.py   173             0      0           0              cur = db().cursor()
+./myapp.py   174             0      0           0              cur.execute('SELECT * FROM candidates')
+./myapp.py   175             0      0           0              candidates = cur.fetchall()
+./myapp.py   176             0      0           0              return render_template('vote.html',
+./myapp.py   177             0      0           0                                     candidates=candidates,
+./myapp.py   178             0      0           0                                     message='')
+./myapp.py   181             0      0           0              @app.route('/vote', methods=['POST'])
+./myapp.py   182             0      0           0              def post_vote():
+./myapp.py   183      2459.031   2907     7148403  ******          cur = db().cursor()
+./myapp.py   184         0.958   2907        2785                  cur.execute('SELECT * FROM users WHERE name = "{}" AND address = "{}" AND mynumber = "{}"'.format(
+./myapp.py   185      4175.343   2907    12137721  !*********          request.form['name'], request.form['address'], request.form['mynumber']
+./myapp.py   186             0      0           0                  ))
+./myapp.py   187        15.441   2907       44888                  user = cur.fetchone()
+./myapp.py   188       392.448   2907     1140847  *               cur.execute('SELECT * FROM candidates WHERE name = "{}"'.format(request.form['candidate']))
+./myapp.py   189        13.927   2907       40487                  candidate = cur.fetchone()
+./myapp.py   190         0.731   2907        2124                  voted_count = 0
+./myapp.py   191         0.759   2907        2205                  if user:
+./myapp.py   192       324.232   2354      763243  *                   cur.execute('SELECT sum(vote_count) AS count FROM votes WHERE user_id = {}'.format(user['id']))
+./myapp.py   193        13.194   2354       31059                      voted_count = cur.fetchone()['count']
+./myapp.py   194         0.768   2354        1809                      if not voted_count:
+./myapp.py   195           0.7   2349        1645                          voted_count = 0
+./myapp.py   196             0      0           0
+./myapp.py   197       564.198   2907     1640124  *               cur.execute('SELECT * FROM candidates')
+./myapp.py   198        12.456   2907       36209                  candidates = cur.fetchall()
+./myapp.py   199         0.757   2907        2202                  if not user:
+./myapp.py   200       1723.36    553      953018  *                   return render_template('vote.html', candidates=candidates, message='個人情報に誤りがあります')
+./myapp.py   201        49.065   2354      115500                  elif user['votes'] < (int(request.form['vote_count']) + voted_count):
+./myapp.py   202        1652.0      1        1652                      return render_template('vote.html', candidates=candidates, message='投票数が上限を超えています')
+./myapp.py   203        38.955   2353       91661                  elif not request.form['candidate']:
+./myapp.py   204        1647.0      1        1647                      return render_template('vote.html', candidates=candidates, message='候補者を記入してください')
+./myapp.py   205         0.763   2352        1795                  elif not candidate:
+./myapp.py   206        1609.0      1        1609                      return render_template('vote.html', candidates=candidates, message='候補者を正しく記入してください')
+./myapp.py   207        37.217   2351       87496                  elif not request.form['keyword']:
+./myapp.py   208        1615.0      1        1615                      return render_template('vote.html', candidates=candidates, message='投票理由を記入してください')
+./myapp.py   209             0      0           0
+./myapp.py   210         0.883   2350        2074                  cur.execute('INSERT INTO votes (user_id, candidate_id, keyword, vote_count) VALUES (%s, %s, %s, %s)', (
+./myapp.py   211      2101.033   2350     4937427  ****                user['id'], candidate['id'], request.form['keyword'], int(request.form['vote_count'])
+./myapp.py   212             0      0           0                  ))
+./myapp.py   213      1752.604   2350     4118620  ***             return render_template('vote.html', candidates=candidates, message='投票に成功しました')
+./myapp.py   216             0      0           0              @app.route('/initialize')
+./myapp.py   217             0      0           0              def get_initialize():
+./myapp.py   218       11735.0      1       11735                  db_initialize()
+./myapp.py   219           1.0      1           1                  return ''
