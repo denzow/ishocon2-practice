@@ -217,5 +217,14 @@ def get_initialize():
     db_initialize()
 
 
+
+from wsgi_lineprof.filters import FilenameFilter
+from wsgi_lineprof.middleware import LineProfilerMiddleware
+f = open("/run/mylog/profile.log", "a")  # 複数ワーカが書き込むので多分wじゃだめな気がする。
+filters = [
+    FilenameFilter('myapp.py'),  # プロファイル対象のファイル名指定
+]
+# stremで出力ファイルを指定、filtersでフィルタを追加
+app_profile = LineProfilerMiddleware(app, stream=f, filters=filters)
 if __name__ == "__main__":
     app.run()
