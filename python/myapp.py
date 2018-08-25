@@ -1,5 +1,6 @@
 import datetime
-import html
+
+from functools import lru_cache
 import os
 import uwsgi
 import pickle
@@ -94,7 +95,7 @@ ORDER BY sum(vote_count) DESC
 LIMIT 10
 """.format(candidate_ids_str))
     records = cur.fetchall()
-    return [r['keyword'] for r in records]
+    return [unquote_cached(r['keyword']) for r in records]
 
 
 def get_all_party_name():
@@ -203,11 +204,11 @@ def post_vote():
     candidate_id = get_candidate_id_by_name(form_base['candidate'])
     voted_count = 0
     if user:
-        #voted_count = get_voted_count_cache(user['id'])
-        cur.execute('SELECT sum(vote_count) AS count FROM votes WHERE user_id = %s', (user['id'],))
-        voted_count = cur.fetchone()['count']
-        if not voted_count:
-            voted_count = 0
+        voted_count = get_voted_count_cache(user['id'])
+        # cur.execute('SELECT sum(vote_count) AS count FROM votes WHERE user_id = %s', (user['id'],))
+        # voted_count = cur.fetchone()['count']
+        # if not voted_count:
+        #     voted_count = 0
     if not user:
         return constants.VOTE_FAIL1_HTML
     elif user['votes'] < (int(form_base['vote_count']) + voted_count):
@@ -220,7 +221,7 @@ def post_vote():
         return constants.VOTE_FAIL5_HTML
 
     cur.execute('INSERT INTO votes (user_id, candidate_id, keyword, vote_count) VALUES (%s, %s, %s, %s)', (
-        user['id'], candidate_id, unquote_plus(form_base['keyword']), int(form_base['vote_count'])
+        user['id'], candidate_id, form_base['keyword'], int(form_base['vote_count'])
     ))
     set_voted_count_cache(user['id'], int(form_base['vote_count']))
     return constants.VOTE_SUCCESS_HTML
@@ -258,6 +259,10 @@ def get_voted_count_cache(user_id):
 def set_voted_count_cache(user_id, voted_count):
     key_name = 'voted_{}'.format(user_id)
     set_cache(key_name, get_cache(key_name, 0) + voted_count)
+
+@lru_cache(maxsize=100)
+def unquote_cached(keyword):
+    return unquote_plus(keyword)
 
 
 from wsgi_lineprof.filters import FilenameFilter
