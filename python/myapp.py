@@ -1,6 +1,10 @@
 import datetime
 
+import redis
+
+from collections import Counter
 from functools import lru_cache
+from hashlib import md5
 import os
 import uwsgi
 import pickle
@@ -25,6 +29,10 @@ _config = {
     'db_database': os.environ.get('ISHOCON2_DB_NAME', 'ishocon2'),
 }
 
+# unix_socket_path='/tmp/my_redis.sock'
+pool = redis.ConnectionPool(host='localhost', port=6379, db=0)
+r = redis.StrictRedis(connection_pool=pool)
+#r = redis.Redis(unix_socket_path='/tmp/redis.sock')
 
 def config(key):
     if key in _config:
@@ -69,33 +77,67 @@ def teardown(exception=None):
 
 
 def get_election_results():
-    cur = db().cursor()
-    cur.execute("""
-SELECT c.id, c.name, c.political_party, c.sex, v.count
-FROM candidates AS c
-LEFT OUTER JOIN
-  (SELECT candidate_id, sum(vote_count) AS count
-  FROM votes
-  GROUP BY candidate_id) AS v
-ON c.id = v.candidate_id
-ORDER BY v.count DESC
-""")
-    return cur.fetchall()
+#     cur = db().cursor()
+#     cur.execute("""
+# SELECT c.id, c.name, c.political_party, c.sex, v.count
+# FROM candidates AS c
+# LEFT OUTER JOIN
+#   (SELECT candidate_id, sum(vote_count) AS count
+#   FROM votes
+#   GROUP BY candidate_id) AS v
+# ON c.id = v.candidate_id
+# ORDER BY v.count DESC
+# """)
+    result = []
+    for candidate_id, data in constants.CANDIDATES_MASTER.items():
+        data['count'] = get_vote_count_cache_by_candidate_id(candidate_id)
+        result.append(data)
+
+    result.sort(key=lambda x: x['count'], reverse=True)
+    return result
+
+
+def get_voice_of_supporter_by_id(candidate_id):
+#     cur = db().cursor()
+#     cur.execute("""
+# SELECT keyword
+# FROM votes
+# WHERE candidate_id = %s
+# GROUP BY keyword
+# ORDER BY sum(vote_count) DESC
+# LIMIT 10
+# """, (candidate_id,))
+#     records = cur.fetchall()
+
+    """
+    {keyword1: 100, keyword2: 200}
+    """
+    keyword_cache = Counter(get_vote_keyword_count_cache_by_candidate_id(candidate_id))
+    result = [unquote_cached(r[0]) for r in keyword_cache.most_common(10)]
+    # print(result)
+    # print([(unquote_cached(r[0]), r[1]) for r in keyword_cache.most_common(10)], keyword_cache.values())
+    return result
 
 
 def get_voice_of_supporter(candidate_ids):
-    cur = db().cursor()
     candidate_ids_str = ','.join([str(cid) for cid in candidate_ids])
-    cur.execute("""
-SELECT keyword
-FROM votes
-WHERE candidate_id IN ({})
-GROUP BY keyword
-ORDER BY sum(vote_count) DESC
-LIMIT 10
-""".format(candidate_ids_str))
-    records = cur.fetchall()
-    return [unquote_cached(r['keyword']) for r in records]
+#
+#     cur = db().cursor()
+#     cur.execute("""
+# SELECT keyword
+# FROM votes
+# WHERE candidate_id IN ({})
+# GROUP BY keyword
+# ORDER BY sum(vote_count) DESC
+# LIMIT 10
+# """.format(candidate_ids_str))
+#     records = cur.fetchall()
+
+    total_keywords = Counter()
+    for candidate_id in candidate_ids:
+        total_keywords += Counter(get_vote_keyword_count_cache_by_candidate_id(candidate_id))
+
+    return [unquote_cached(r[0]) for r in total_keywords.most_common(10)]
 
 
 def get_all_party_name():
@@ -147,9 +189,9 @@ def get_candidate(candidate_id):
     if not candidate:
         return redirect('/')
 
-    cur.execute('SELECT sum(vote_count) AS count FROM votes WHERE candidate_id = {}'.format(candidate_id))
-    votes = cur.fetchone()['count']
-    keywords = get_voice_of_supporter([candidate_id])
+    #cur.execute('SELECT sum(vote_count) AS count FROM votes WHERE candidate_id = {}'.format(candidate_id))
+    votes = get_vote_count_cache_by_candidate_id(candidate_id)
+    keywords = get_voice_of_supporter_by_id(candidate_id)
     return render_template('candidate.html',
                            candidate=candidate,
                            votes=votes,
@@ -158,15 +200,15 @@ def get_candidate(candidate_id):
 
 @app.route('/political_parties/<string:name>')
 def get_political_party(name):
-    cur = db().cursor()
     votes = 0
     for r in get_election_results():
         if r['political_party'] == name:
             votes += r['count'] or 0
 
-    cur.execute('SELECT * FROM candidates WHERE political_party = "{}"'.format(name))
-    candidates = cur.fetchall()
-    candidate_ids = [c['id'] for c in candidates]
+#    cur.execute('SELECT * FROM candidates WHERE political_party = "{}"'.format(name))
+
+    candidate_ids = constants.PARTY_MASTER.get(name)
+    candidates = [get_candidate_by_id(candidate_id) for candidate_id in candidate_ids]
     keywords = get_voice_of_supporter(candidate_ids)
     return render_template('political_party.html',
                            political_party=name,
@@ -177,12 +219,7 @@ def get_political_party(name):
 
 @app.route('/vote')
 def get_vote():
-    cur = db().cursor()
-    cur.execute('SELECT * FROM candidates')
-    candidates = cur.fetchall()
-    return render_template('vote.html',
-                           candidates=candidates,
-                           message='')
+    return constants.VOTE_HTML
 
 
 @app.route('/vote', methods=['POST'])
@@ -214,16 +251,19 @@ def post_vote():
     elif not form_base['keyword']:
         return constants.VOTE_FAIL5_HTML
 
-    data = (user['id'], candidate_id, form_base['keyword'], int(form_base['vote_count']))
-    cur.execute('INSERT INTO votes (user_id, candidate_id, keyword, vote_count) VALUES (%s, %s, %s, %s)', data)
-
-    set_voted_count_cache(user['id'], int(form_base['vote_count']))
+    vote_count = int(form_base['vote_count'])
+    data = (user['id'], candidate_id, form_base['keyword'], vote_count)
+    #cur.execute('INSERT INTO votes (user_id, candidate_id, keyword, vote_count) VALUES (%s, %s, %s, %s)', data)
+    set_vote_count_cache_by_candidate_id(candidate_id, vote_count)
+    set_vote_keyword_count_cache_by_candidate_id(candidate_id, form_base['keyword'],  vote_count)
+    set_voted_count_cache(user['id'], vote_count)
     return constants.VOTE_SUCCESS_HTML
 
 
 @app.route('/initialize')
 def get_initialize():
     db_initialize()
+    r.flushdb()
     return ''
 
 
@@ -245,28 +285,72 @@ def get_cache(key, default=None):
         return default
 
 
-def get_voted_count_cache(user_id):
-    key_name = 'voted_{}'.format(user_id)
-    return get_cache(key_name, 0)
-
-
 def set_voted_count_cache(user_id, voted_count):
     key_name = 'voted_{}'.format(user_id)
     set_cache(key_name, get_cache(key_name, 0) + voted_count)
 
 
+def get_voted_count_cache(user_id):
+    key_name = 'voted_{}'.format(user_id)
+    return get_cache(key_name, 0)
 
-def add_vote_buffer(data):
-    uwsgi.queue_push(pickle.dumps(data))
+
+def set_vote_count_cache_by_candidate_id(candidate_id, voted_count):
+    key_name = md5('cv_{}'.format(
+        candidate_id,
+    ).encode('utf-8')).hexdigest()
+    set_cache(key_name, get_cache(key_name, 0) + voted_count)
 
 
-def get_all_vote_buffer():
-    result = []
-    for queue in uwsgi.queue_pop():
-        if not queue:
-            break
-        result.append(pickle.loads(queue))
+def get_vote_count_cache_by_candidate_id(candidate_id):
+    key_name = md5('cv_{}'.format(
+        candidate_id,
+    ).encode('utf-8')).hexdigest()
+    return get_cache(key_name, 0)
+
+
+def set_vote_keyword_count_cache_by_candidate_id(candidate_id, keyword, vote_count):
+    key_name = 'ckv_{}_{}'.format(
+        candidate_id, keyword
+    )
+    r.incr(key_name, vote_count)
+
+
+def get_vote_keyword_count_cache_by_candidate_id(candidate_id):
+    key_name = 'ckv_{}_*'.format(candidate_id)
+    result = {}
+    for key in r.keys(key_name):
+        keyword = key.decode('utf-8').split('_')[2]
+        result[keyword] = int(r.get(key))
+
     return result
+
+# def set_candidate_id_keyword_vote_count_cache(candidate_id, keyword, voted_count):
+#     key_name = md5('ckv_{}{}'.format(
+#         candidate_id,
+#         keyword,
+#     ).encode('utf-8')).hexdigest()
+#     set_cache(key_name, get_cache(key_name, 0) + voted_count)
+#
+#
+# def get_candidate_id_keyword_vote_count_cache(candidate_id, keyword):
+#     key_name = md5('ckv_{}{}'.format(
+#         candidate_id,
+#         keyword,
+#     ).encode('utf-8')).hexdigest()
+#     return get_cache(key_name)
+
+# def add_vote_buffer(data):
+#     uwsgi.queue_push(pickle.dumps(data))
+#
+#
+# def get_all_vote_buffer():
+#     result = []
+#     for queue in uwsgi.queue_pop():
+#         if not queue:
+#             break
+#         result.append(pickle.loads(queue))
+#     return result
 
 
 def get_vote_buffer_len():

@@ -8,3 +8,8 @@ sudo service mysql restart
 echo 'nginx'
 sudo cp ${BASE_DIR}/etc/nginx/nginx.conf  /etc/nginx/nginx.conf
 sudo service nginx restart
+
+
+echo 'redis'
+sudo cp ${BASE_DIR}/etc/redis/redis.conf  /etc/redis/redis.conf
+sudo service redis restart
