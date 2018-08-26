@@ -193,3 +193,4 @@ PARTY_MASTER = {
     '国民平和党': [6,11,14,17,22,24,28],
     '夢実現党': [1,12,13,16,18,20,21,23,26],
 }
+QUOTED_PARTY_MAP = {urllib.parse.quote_plus(k): k for k in PARTY_MASTER.keys()}
