@@ -57,7 +57,6 @@ async def close_redis(_app, _loop):
     await _app.redis2.wait_closed()
 
 
-
 async def get_election_results():
     result = []
     for candidate_id, data in constants.CANDIDATES_MASTER.items():
@@ -72,15 +71,13 @@ async def get_voice_of_supporter_by_id(candidate_id):
     """
     {keyword1: 100, keyword2: 200}
     """
-    keyword_cache = Counter(await get_vote_keyword_count_cache_by_candidate_id(candidate_id))
-    result = [unquote_cached(r[0]) for r in keyword_cache.most_common(10)]
-    return result
+    return [unquote_cached(r[0]) for r in await get_vote_keyword_count_cache_by_candidate_id_top_10(candidate_id)]
 
 
 async def get_voice_of_supporter(candidate_ids):
     total_keywords = Counter()
     for candidate_id in candidate_ids:
-        total_keywords.update(await get_vote_keyword_count_cache_by_candidate_id(candidate_id))
+        total_keywords += await get_vote_keyword_count_cache_by_candidate_id(candidate_id)
 
     return [unquote_cached(r[0]) for r in total_keywords.most_common(10)]
 
@@ -201,7 +198,6 @@ async def get_political_party(request, name):
 async def get_vote(request):
     return text(constants.VOTE_HTML)
 
-
 @app.route('/vote', methods=['POST'])
 async def post_vote(request):
     raw_params = request.body.decode('utf-8').split('&')
@@ -229,14 +225,11 @@ async def post_vote(request):
         return text(constants.VOTE_FAIL5_HTML)
 
     vote_count = int(form_base['vote_count'])
-    party_name = constants.CANDIDATES_MASTER.get(candidate_id).get('political_party')
     asyncio.gather(
         set_vote_count_cache_by_candidate_id(candidate_id, vote_count),
         set_vote_keyword_count_cache_by_candidate_id(candidate_id, form_base['keyword'], vote_count),
         set_voted_count_cache_by_user_id(user_id, vote_count),
-        clear_page_cache(),
-        clear_party_cache(party_name),
-        clear_candidate_cache(candidate_id),
+        incr_vote_counter(),
     )
     return text(constants.VOTE_SUCCESS_HTML)
 
@@ -244,11 +237,12 @@ async def post_vote(request):
 @app.route('/initialize')
 async def get_initialize(request):
     db_initialize()
-    global VOTE_CACHE, VOTE_COUNT_CACHE, VOTE_KEYWORD_CACHE, HTML_CACHE
+    global VOTE_CACHE, VOTE_COUNT_CACHE, VOTE_KEYWORD_CACHE, HTML_CACHE, VOTE_COUNTER
     VOTE_CACHE = defaultdict(int)
     VOTE_COUNT_CACHE = defaultdict(int)
-    VOTE_KEYWORD_CACHE = defaultdict(dict)
+    VOTE_KEYWORD_CACHE = defaultdict(Counter)
     HTML_CACHE = {}
+    VOTE_COUNTER = 0
     return HTTPResponse()
 
 
@@ -266,11 +260,18 @@ def mydecode(base, defalut=None):
 def get_candidate_id_by_name(name):
     return constants.QUOTED_CANDIDATES.get(name, None)
 
+
 # caches
 VOTE_CACHE = defaultdict(int)
 VOTE_COUNT_CACHE = defaultdict(int)
-VOTE_KEYWORD_CACHE = defaultdict(dict)
+VOTE_KEYWORD_CACHE = defaultdict(Counter)
 HTML_CACHE = {}
+VOTE_COUNTER = 0
+async def incr_vote_counter():
+    global VOTE_COUNTER
+    VOTE_COUNTER += 1
+
+
 async def set_voted_count_cache_by_user_id(user_id, voted_count):
     VOTE_CACHE[user_id] += voted_count
 
@@ -288,14 +289,15 @@ async def get_vote_count_cache_by_candidate_id(candidate_id):
 
 
 async def set_vote_keyword_count_cache_by_candidate_id(candidate_id, keyword, vote_count):
-    if keyword not in VOTE_KEYWORD_CACHE[candidate_id]:
-        VOTE_KEYWORD_CACHE[candidate_id][keyword] = 0
     VOTE_KEYWORD_CACHE[candidate_id][keyword] += vote_count
 
 
 async def get_vote_keyword_count_cache_by_candidate_id(candidate_id):
     return VOTE_KEYWORD_CACHE[candidate_id]
 
+
+async def get_vote_keyword_count_cache_by_candidate_id_top_10(candidate_id):
+    return VOTE_KEYWORD_CACHE[candidate_id].most_common(10)
 
 
 async def get_user_cache(mynumber, name, address):
@@ -310,39 +312,27 @@ async def get_user_cache(mynumber, name, address):
 
 
 async def set_index_cache(html):
-    HTML_CACHE['index'] = html
+    HTML_CACHE['index_{}'.format(VOTE_COUNTER)] = html
 
 
 async def get_index_cache():
-    return HTML_CACHE.get('index')
-
-
-async def clear_page_cache():
-    HTML_CACHE['index'] = None
+    return HTML_CACHE.get('index_{}'.format(VOTE_COUNTER))
 
 
 async def set_party_cache(name, html):
-    HTML_CACHE['party_{}'.format(name)] = html
+    HTML_CACHE['party_{}{}'.format(name, VOTE_COUNTER)] = html
 
 
 async def get_party_cache(name):
-    return HTML_CACHE.get('party_{}'.format(name))
-
-
-async def clear_party_cache(name):
-    HTML_CACHE['party_{}'.format(name)] = None
+    return HTML_CACHE.get('party_{}{}'.format(name, VOTE_COUNTER))
 
 
 async def set_candidate_cache(candidate_id, html):
-    HTML_CACHE['candidate_{}'.format(candidate_id)] = html
+    HTML_CACHE['candidate_{}_{}'.format(candidate_id, VOTE_COUNTER)] = html
 
 
 async def get_candidate_cache(candidate_id):
-    return HTML_CACHE.get('candidate_{}'.format(candidate_id))
-
-
-async def clear_candidate_cache(candidate_id):
-    HTML_CACHE['candidate_{}'.format(candidate_id)] = None
+    return HTML_CACHE.get('candidate_{}_{}'.format(candidate_id, VOTE_COUNTER))
 
 
 @lru_cache(maxsize=100)
