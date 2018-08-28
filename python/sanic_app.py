@@ -1,9 +1,7 @@
-from collections import Counter
+from collections import Counter, defaultdict
 from functools import lru_cache
 from hashlib import md5
 import os
-import pickle
-import pathlib
 from urllib.parse import unquote_plus
 import asyncio
 
@@ -13,13 +11,10 @@ import jinja2_sanic
 from sanic import Sanic, response
 from sanic.response import HTTPResponse, text
 from aioredis import create_redis_pool
-from sanic_redis import SanicRedis
 
 
-
-# TODO static_folder=str(static_folder), static_url_path=''
-static_folder = pathlib.Path(__file__).resolve().parent / 'public'
 app = Sanic(__name__)
+app.config.KEEP_ALIVE_TIMEOUT = 75
 
 app.secret_key = os.environ.get('ISHOCON2_SESSION_SECRET', 'showwin_happy')
 
@@ -209,7 +204,6 @@ async def get_vote(request):
 
 @app.route('/vote', methods=['POST'])
 async def post_vote(request):
-    # TODO
     raw_params = request.body.decode('utf-8').split('&')
     form_base = {x.split('=')[0]: x.split('=')[1] for x in raw_params}
     data = (form_base['mynumber'], form_base['name'], form_base['address'])
@@ -250,7 +244,11 @@ async def post_vote(request):
 @app.route('/initialize')
 async def get_initialize(request):
     db_initialize()
-    await app.redis1.flushdb()
+    global VOTE_CACHE, VOTE_COUNT_CACHE, VOTE_KEYWORD_CACHE, HTML_CACHE
+    VOTE_CACHE = defaultdict(int)
+    VOTE_COUNT_CACHE = defaultdict(int)
+    VOTE_KEYWORD_CACHE = defaultdict(dict)
+    HTML_CACHE = {}
     return HTTPResponse()
 
 
@@ -265,50 +263,39 @@ def mydecode(base, defalut=None):
     return defalut
 
 
-
-
 def get_candidate_id_by_name(name):
     return constants.QUOTED_CANDIDATES.get(name, None)
 
-
+# caches
+VOTE_CACHE = defaultdict(int)
+VOTE_COUNT_CACHE = defaultdict(int)
+VOTE_KEYWORD_CACHE = defaultdict(dict)
+HTML_CACHE = {}
 async def set_voted_count_cache_by_user_id(user_id, voted_count):
-    key_name = 'voted_{}'.format(user_id)
-    await app.redis1.incrby(key_name, voted_count)
+    VOTE_CACHE[user_id] += voted_count
 
 
 async def get_voted_count_cache_by_user_id(user_id):
-    key_name = 'voted_{}'.format(user_id)
-    return myint(await app.redis1.get(key_name))
+    return VOTE_CACHE[user_id]
 
 
 async def set_vote_count_cache_by_candidate_id(candidate_id, voted_count):
-    key_name = md5('cv_{}'.format(
-        candidate_id,
-    ).encode('utf-8')).hexdigest()
-    await app.redis1.incrby(key_name, voted_count)
+    VOTE_COUNT_CACHE[candidate_id] += voted_count
 
 
 async def get_vote_count_cache_by_candidate_id(candidate_id):
-    key_name = md5('cv_{}'.format(
-        candidate_id,
-    ).encode('utf-8')).hexdigest()
-    return myint(await app.redis1.get(key_name))
+    return VOTE_COUNT_CACHE[candidate_id]
 
 
 async def set_vote_keyword_count_cache_by_candidate_id(candidate_id, keyword, vote_count):
-    key_name = 'ckv_{}_{}'.format(
-        candidate_id, keyword
-    )
-    await app.redis1.incrby(key_name, vote_count)
+    if keyword not in VOTE_KEYWORD_CACHE[candidate_id]:
+        VOTE_KEYWORD_CACHE[candidate_id][keyword] = 0
+    VOTE_KEYWORD_CACHE[candidate_id][keyword] += vote_count
 
 
 async def get_vote_keyword_count_cache_by_candidate_id(candidate_id):
-    key_name = 'ckv_{}_*'.format(candidate_id)
-    result = {}
-    for key in await app.redis1.keys(key_name):
-        keyword = key.decode('utf-8').split('_')[2]
-        result[keyword] = int(await app.redis1.get(key))
-    return result
+    return VOTE_KEYWORD_CACHE[candidate_id]
+
 
 
 async def get_user_cache(mynumber, name, address):
@@ -323,41 +310,39 @@ async def get_user_cache(mynumber, name, address):
 
 
 async def set_index_cache(html):
-    return await app.redis1.set('index_html', html)
+    HTML_CACHE['index'] = html
 
 
 async def get_index_cache():
-    return mydecode(await app.redis1.get('index_html'))
-
+    return HTML_CACHE.get('index')
 
 
 async def clear_page_cache():
-    tasks = [app.redis1.delete('index_html')]
-    await asyncio.gather(*tasks)
+    HTML_CACHE['index'] = None
 
 
 async def set_party_cache(name, html):
-    await app.redis1.set('party_{}'.format(name), html)
+    HTML_CACHE['party_{}'.format(name)] = html
 
 
 async def get_party_cache(name):
-    return mydecode(await app.redis1.get('party_{}'.format(name)))
+    return HTML_CACHE.get('party_{}'.format(name))
 
 
-async def clear_party_cache(candidate_id):
-    await app.redis1.delete('candidate_{}'.format(candidate_id))
+async def clear_party_cache(name):
+    HTML_CACHE['party_{}'.format(name)] = None
 
 
 async def set_candidate_cache(candidate_id, html):
-    await app.redis1.set('candidate_{}'.format(candidate_id), html)
+    HTML_CACHE['candidate_{}'.format(candidate_id)] = html
 
 
 async def get_candidate_cache(candidate_id):
-    return mydecode(await app.redis1.get('candidate_{}'.format(candidate_id)))
+    return HTML_CACHE.get('candidate_{}'.format(candidate_id))
 
 
 async def clear_candidate_cache(candidate_id):
-    await app.redis1.delete('candidate_{}'.format(candidate_id))
+    HTML_CACHE['candidate_{}'.format(candidate_id)] = None
 
 
 @lru_cache(maxsize=100)
