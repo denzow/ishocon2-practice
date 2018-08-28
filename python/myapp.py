@@ -1,6 +1,3 @@
-import datetime
-
-from concurrent import futures
 import redis
 
 from collections import Counter
@@ -12,10 +9,9 @@ import pickle
 import pathlib
 from urllib.parse import unquote_plus
 
-import MySQLdb.cursors
 import constants
 
-from flask import Flask, abort, redirect, render_template, request, session
+from flask import Flask, redirect, render_template, request
 
 static_folder = pathlib.Path(__file__).resolve().parent / 'public'
 app = Flask(__name__, static_folder=str(static_folder), static_url_path='')
@@ -30,13 +26,12 @@ _config = {
     'db_database': os.environ.get('ISHOCON2_DB_NAME', 'ishocon2'),
 }
 
-# unix_socket_path='/tmp/my_redis.sock'
 pool = redis.ConnectionPool(host='localhost', port=6379, db=0)
 r = redis.StrictRedis(connection_pool=pool)
 
 pool2 = redis.ConnectionPool(host='localhost', port=6379, db=1)
 r2 = redis.StrictRedis(connection_pool=pool2)
-#r = redis.Redis(unix_socket_path='/tmp/redis.sock')
+
 
 def config(key):
     if key in _config:
@@ -45,53 +40,7 @@ def config(key):
         raise "config value of %s undefined" % key
 
 
-def get_conn():
-    db = MySQLdb.connect(**{
-        'host': config('db_host'),
-        'port': config('db_port'),
-        'user': config('db_username'),
-        'passwd': config('db_password'),
-        'db': config('db_database'),
-        'charset': 'utf8mb4',
-        'cursorclass': MySQLdb.cursors.DictCursor,
-        'autocommit': True,
-    })
-    cur = db.cursor()
-    cur.execute("SET SESSION sql_mode='TRADITIONAL,NO_AUTO_VALUE_ON_ZERO,ONLY_FULL_GROUP_BY'")
-    cur.execute('SET NAMES utf8mb4')
-    return db
-
-
-#DB_POOL = [get_conn() for _ in range(3)]
-
-
-# def db():
-#     if hasattr(request, 'db'):
-#         return request.db
-#     else:
-#         request.db = DB_POOL.pop()
-#         return request.db
-#
-#
-# @app.teardown_request
-# def teardown(exception=None):
-#     if hasattr(request, 'db'):
-#         DB_POOL.append(request.db)
-#         delattr(request, 'db')
-
-
 def get_election_results():
-#     cur = db().cursor()
-#     cur.execute("""
-# SELECT c.id, c.name, c.political_party, c.sex, v.count
-# FROM candidates AS c
-# LEFT OUTER JOIN
-#   (SELECT candidate_id, sum(vote_count) AS count
-#   FROM votes
-#   GROUP BY candidate_id) AS v
-# ON c.id = v.candidate_id
-# ORDER BY v.count DESC
-# """)
     result = []
     for candidate_id, data in constants.CANDIDATES_MASTER.items():
         data['count'] = get_vote_count_cache_by_candidate_id(candidate_id)
@@ -102,41 +51,15 @@ def get_election_results():
 
 
 def get_voice_of_supporter_by_id(candidate_id):
-#     cur = db().cursor()
-#     cur.execute("""
-# SELECT keyword
-# FROM votes
-# WHERE candidate_id = %s
-# GROUP BY keyword
-# ORDER BY sum(vote_count) DESC
-# LIMIT 10
-# """, (candidate_id,))
-#     records = cur.fetchall()
-
     """
     {keyword1: 100, keyword2: 200}
     """
     keyword_cache = Counter(get_vote_keyword_count_cache_by_candidate_id(candidate_id))
     result = [unquote_cached(r[0]) for r in keyword_cache.most_common(10)]
-    # print(result)
-    # print([(unquote_cached(r[0]), r[1]) for r in keyword_cache.most_common(10)], keyword_cache.values())
     return result
 
 
 def get_voice_of_supporter(candidate_ids):
-    candidate_ids_str = ','.join([str(cid) for cid in candidate_ids])
-#
-#     cur = db().cursor()
-#     cur.execute("""
-# SELECT keyword
-# FROM votes
-# WHERE candidate_id IN ({})
-# GROUP BY keyword
-# ORDER BY sum(vote_count) DESC
-# LIMIT 10
-# """.format(candidate_ids_str))
-#     records = cur.fetchall()
-
     total_keywords = Counter()
     for candidate_id in candidate_ids:
         total_keywords.update(get_vote_keyword_count_cache_by_candidate_id(candidate_id))
@@ -190,7 +113,6 @@ def get_candidate(candidate_id):
     candidate = get_candidate_by_id(candidate_id)
     if not candidate:
         return redirect('/')
-    # cur.execute('SELECT sum(vote_count) AS count FROM votes WHERE candidate_id = {}'.format(candidate_id))
     votes = get_vote_count_cache_by_candidate_id(candidate_id)
     keywords = get_voice_of_supporter_by_id(candidate_id)
     return render_template('candidate.html',
@@ -207,7 +129,6 @@ def get_political_party(name):
             votes += r['count'] or 0
 
 #    cur.execute('SELECT * FROM candidates WHERE political_party = "{}"'.format(name))
-
     candidate_ids = constants.PARTY_MASTER.get(name)
     candidates = [get_candidate_by_id(candidate_id) for candidate_id in candidate_ids]
     keywords = get_voice_of_supporter(candidate_ids)
@@ -225,13 +146,9 @@ def get_vote():
 
 @app.route('/vote', methods=['POST'])
 def post_vote():
-    #cur = db().cursor()
     raw_params = request._get_stream_for_parsing().read().decode('utf-8').split('&')
-    #form_base = {x.split('=')[0]: unquote_plus(x.split('=')[1]) for x in raw_params}
     form_base = {x.split('=')[0]: x.split('=')[1] for x in raw_params}
     data = (form_base['mynumber'], form_base['name'], form_base['address'])
-    # cur.execute('SELECT id, votes FROM users WHERE mynumber = %s AND name = %s AND address = %s', data)
-    # user = cur.fetchone()
     cache = get_user_cache(*data)
     if cache:
         user_id, user_votes = cache
@@ -242,10 +159,6 @@ def post_vote():
     voted_count = 0
     if user_id:
         voted_count = get_voted_count_cache(user_id)
-        # cur.execute('SELECT sum(vote_count) AS count FROM votes WHERE user_id = %s', (user['id'],))
-        # voted_count = cur.fetchone()['count']
-        # if not voted_count:
-        #     voted_count = 0
     if not user_id:
         return constants.VOTE_FAIL1_HTML
     elif user_votes < (int(form_base['vote_count']) + voted_count):
@@ -258,8 +171,6 @@ def post_vote():
         return constants.VOTE_FAIL5_HTML
 
     vote_count = int(form_base['vote_count'])
-    #data = (user['id'], candidate_id, form_base['keyword'], vote_count)
-    #cur.execute('INSERT INTO votes (user_id, candidate_id, keyword, vote_count) VALUES (%s, %s, %s, %s)', data)
     set_vote_count_cache_by_candidate_id(candidate_id, vote_count)
     set_vote_keyword_count_cache_by_candidate_id(candidate_id, form_base['keyword'],  vote_count)
     set_voted_count_cache(user_id, vote_count)
